@@ -4,7 +4,6 @@ const axios = require('axios');
 const mongoose = require('mongoose');
 const express = require('express');
 const cheerio = require('cheerio');
-const { parseAnswerSheetHTML } = require('./parser');
 consts = require('./answerKeys');
 
 // Initialize Express app
