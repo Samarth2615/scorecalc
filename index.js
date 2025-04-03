@@ -124,7 +124,6 @@ app.get('/admin', basicAuth, async (req, res) => {
         <td>${progressBar(r.subjectScores.physics.correct)}</td>
         <td>${progressBar(r.subjectScores.chemistry.correct)}</td>
         <td>${progressBar(r.subjectScores.maths.correct)}</td>
-        <td>${r.responseSheetUrl.}</td>
         <td><a href="/admin/response/${r._id}">View</a></td>
       </tr>`;
     });
