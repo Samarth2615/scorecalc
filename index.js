@@ -34,20 +34,7 @@ const responseSchema = new mongoose.Schema({
 });
 const Response = mongoose.model('Response', responseSchema);
 
-// Initialize Telegram Bot
-const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: false });
-
-// Webhook Setup
-app.post(`/webhook/${process.env.TELEGRAM_BOT_TOKEN}`, (req, res) => {
-  bot.processUpdate(req.body);
-  res.sendStatus(200);
-});
-
-// Health Check
-app.get('/', (req, res) => res.send('JEE Mains Bot is running!'));
-
-// Admin Dashboard
-app.get('/admin', basicAuth, async (req, res) => {
+// Initializeapp.get('/admin', basicAuth, async (req, res) => {
   try {
     const responses = await Response.find().sort({ analysisDate: -1 }).limit(50);
     
@@ -81,16 +68,17 @@ app.get('/admin', basicAuth, async (req, res) => {
     `;
 
     responses.forEach(r => {
-      const progress = (subject) => {
-        const percentage = Math.round((r.subjectScores[subject].correct / 25) * 100;
-        return `
-        <div class="progress">
-          <div class="progress-bar" style="width:${percentage}%">
-            ${r.subjectScores[subject].correct}
-          </div>
-        </div>
-        `;
-      };
+      // In your admin dashboard route, update the progress function to:
+const progress = (subject) => {
+  const percentage = Math.round((r.subjectScores[subject].correct / 25) * 100);
+  return `
+  <div class="progress">
+    <div class="progress-bar" style="width:${percentage}%">
+      ${r.subjectScores[subject].correct}
+    </div>
+  </div>
+  `;
+};
       
       html += `
         <tr>
@@ -121,7 +109,20 @@ app.get('/admin', basicAuth, async (req, res) => {
   } catch (err) {
     res.status(500).send(err.message);
   }
+}); Telegram Bot
+const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: false });
+
+// Webhook Setup
+app.post(`/webhook/${process.env.TELEGRAM_BOT_TOKEN}`, (req, res) => {
+  bot.processUpdate(req.body);
+  res.sendStatus(200);
 });
+
+// Health Check
+app.get('/', (req, res) => res.send('JEE Mains Bot is running!'));
+
+// Admin Dashboard
+
 
 // View Single Response
 app.get('/admin/response/:id', basicAuth, async (req, res) => {
