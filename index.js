@@ -276,7 +276,6 @@ function parseAnswerSheetHTML(html) {
 
   return { general_info: generalInfo, questions };
 }
-
 function evaluateAnswers(userAnswers, answerKey) {
   const result = {
     correctCount: 0,
@@ -287,19 +286,24 @@ function evaluateAnswers(userAnswers, answerKey) {
       physics: { correct: 0, incorrect: 0, unattempted: 0, dropped: 0 },
       chemistry: { correct: 0, incorrect: 0, unattempted: 0, dropped: 0 },
       maths: { correct: 0, incorrect: 0, unattempted: 0, dropped: 0 }
-    }
+    },
+    totalScore: 0,       // Final computed score
+    totalQuestions: 0    // Total questions in the exam
   };
 
   Object.entries(answerKey).forEach(([questionId, correctAnswerId]) => {
     const userAnswer = userAnswers.find(q => q.question_id === questionId);
-    const subject = userAnswer?.subject || "unknown";
+    const subject = userAnswer?.subject?.toLowerCase() || "unknown";
+
+    if (!result.subjectStats[subject]) {
+      result.subjectStats[subject] = { correct: 0, incorrect: 0, unattempted: 0, dropped: 0 };
+    }
 
     if (correctAnswerId === "Drop") {
       result.droppedCount++;
       result.subjectStats[subject].dropped++;
     } else if (userAnswer?.given_answer !== "No Answer") {
       result.attemptedCount++;
-      result.subjectStats[subject].attempted++;
 
       const isCorrect = correctAnswerId.includes(",") 
         ? correctAnswerId.split(",").includes(userAnswer.given_answer)
@@ -313,12 +317,14 @@ function evaluateAnswers(userAnswers, answerKey) {
         result.subjectStats[subject].incorrect++;
       }
     } else {
-      result.subjectStats[subject].unattempted++;
+      result.subjectStats[subject].unattempted++; // Unattempted (no deduction)
     }
   });
 
+  // Updated marks calculation (no penalty for unattempted)
   result.totalScore = (result.correctCount * 4) - (result.incorrectCount * 1) + (result.droppedCount * 4);
   result.totalQuestions = Object.keys(answerKey).length;
+
   return result;
 }
 
