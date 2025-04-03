@@ -4,7 +4,7 @@ const axios = require('axios');
 const mongoose = require('mongoose');
 const express = require('express');
 const cheerio = require('cheerio');
-consts = require('./answerKeys');
+const = require('./answerKeys');
 
 // Initialize Express app
 const app = express();
