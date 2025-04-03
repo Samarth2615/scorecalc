@@ -359,7 +359,7 @@ function formatResults(info, result) {
 ✖️ <b>Dropped:</b> ${result.droppedCount} (➕${result.droppedCount * 4} marks)
 📝 <b>Attempted:</b> ${result.attemptedCount}/${result.totalQuestions}
 
-🎯 <b>Estimated Score:</b> <code>${result.totalScore}/300</code>
+🖕 <b>Estimated Score:</b> <code>${result.totalScore}/300</code>
 
 <b>📚 Subject-wise Analysis</b>
 ${subjectStats('physics')}
