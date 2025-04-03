@@ -46,19 +46,6 @@ app.post(`/webhook/${process.env.TELEGRAM_BOT_TOKEN}`, (req, res) => {
 // Health Check
 app.get('/', (req, res) => res.send('JEE Mains Bot is running!'));
 
-// ADMIN DASHBOARD (Basic Auth)
-const basicAuth = (req, res, next) => {
-  const auth = { login: 'admin', password: process.env.ADMIN_PASSWORD || 'admin123' };
-  const b64auth = (req.headers.authorization || '').split(' ')[1] || '';
-  const [login, password] = Buffer.from(b64auth, 'base64').toString().split(':');
-  
-  if (login === auth.login && password === auth.password) {
-    return next();
-  }
-  res.set('WWW-Authenticate', 'Basic realm="401"');
-  res.status(401).send('Authentication required');
-};
-
 // Admin Dashboard
 app.get('/admin', basicAuth, async (req, res) => {
   try {
@@ -94,13 +81,16 @@ app.get('/admin', basicAuth, async (req, res) => {
     `;
 
     responses.forEach(r => {
-      const progress = (subject) => `
+      const progress = (subject) => {
+        const percentage = Math.round((r.subjectScores[subject].correct / 25) * 100;
+        return `
         <div class="progress">
-          <div class="progress-bar" style="width:${Math.round((r.subjectScores[subject].correct / 25) * 100}%">
+          <div class="progress-bar" style="width:${percentage}%">
             ${r.subjectScores[subject].correct}
           </div>
         </div>
-      `;
+        `;
+      };
       
       html += `
         <tr>
