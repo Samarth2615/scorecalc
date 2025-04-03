@@ -275,6 +275,7 @@ function parseAnswerSheetHTML(html) {
 
   return { general_info: generalInfo, questions };
 }
+
 function evaluateAnswers(userAnswers, answerKey) {
   const result = {
     correctCount: 0,
@@ -286,8 +287,8 @@ function evaluateAnswers(userAnswers, answerKey) {
       chemistry: { correct: 0, incorrect: 0, unattempted: 0, dropped: 0 },
       maths: { correct: 0, incorrect: 0, unattempted: 0, dropped: 0 }
     },
-    totalScore: 0,       // Final computed score
-    totalQuestions: 0    // Total questions in the exam
+    totalScore: 0,
+    totalQuestions: Object.keys(answerKey).length
   };
 
   Object.entries(answerKey).forEach(([questionId, correctAnswerId]) => {
@@ -301,7 +302,7 @@ function evaluateAnswers(userAnswers, answerKey) {
     if (correctAnswerId === "Drop") {
       result.droppedCount++;
       result.subjectStats[subject].dropped++;
-    } else if (userAnswer?.given_answer !== "No Answer") {
+    } else if (userAnswer?.given_answer && userAnswer.given_answer !== "No Answer") {
       result.attemptedCount++;
 
       const isCorrect = correctAnswerId.includes(",") 
@@ -316,14 +317,13 @@ function evaluateAnswers(userAnswers, answerKey) {
         result.subjectStats[subject].incorrect++;
       }
     } else {
-      result.subjectStats[subject].unattempted++; // Unattempted (no deduction)
+      result.subjectStats[subject].unattempted++; // Not counted as incorrect
     }
   });
 
-  // Updated marks calculation (no penalty for unattempted)
+  // Corrected scoring (no penalty for unattempted)
   result.totalScore = (result.correctCount * 4) - (result.incorrectCount * 1) + (result.droppedCount * 4);
-  result.totalQuestions = Object.keys(answerKey).length;
-
+  
   return result;
 }
 
