@@ -3,6 +3,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
 const mongoose = require('mongoose');
 const express = require('express');
+const cheerio = require('cheerio');
 
 // Initialize Express app
 const app = express();
