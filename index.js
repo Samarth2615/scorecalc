@@ -3,45 +3,92 @@ const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
 const mongoose = require('mongoose');
 const express = require('express');
-const { parseAnswerSheetHTML } = require('./parser');
-const answerKeys = require('./answerKeys');
 
-// Initialize Express
+// Initialize Express app
 const app = express();
 app.use(express.json());
 
-// Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI)
-  .then(() => console.log('MongoDB connected'))
-  .catch(err => console.error('MongoDB connection error:', err));
+// Connect to MongoDB with error handling
+const connectDB = async () => {
+  try {
+    await mongoose.connect(process.env.MONGODB_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true
+    });
+    console.log('MongoDB connected successfully');
+  } catch (err) {
+    console.error('MongoDB connection error:', err);
+    process.exit(1);
+  }
+};
+connectDB();
 
-// Response Schema
+// Response Schema with validation
 const responseSchema = new mongoose.Schema({
-  applicationNumber: String,
-  candidateName: String,
-  rollNumber: String,
-  testDate: String,
-  testTime: String,
-  responseSheetUrl: String,
-  totalScore: Number,
+  applicationNumber: { type: String, required: true },
+  candidateName: { type: String, required: true },
+  rollNumber: { type: String, required: true, index: true },
+  testDate: { type: String, required: true },
+  testTime: { type: String, required: true },
+  responseSheetUrl: { type: String, required: true },
+  totalScore: { type: Number, required: true },
   subjectScores: {
-    physics: { correct: Number, incorrect: Number, unattempted: Number, dropped: Number },
-    chemistry: { correct: Number, incorrect: Number, unattempted: Number, dropped: Number },
-    maths: { correct: Number, incorrect: Number, unattempted: Number, dropped: Number }
+    physics: {
+      correct: { type: Number, default: 0 },
+      incorrect: { type: Number, default: 0 },
+      unattempted: { type: Number, default: 0 },
+      dropped: { type: Number, default: 0 }
+    },
+    chemistry: {
+      correct: { type: Number, default: 0 },
+      incorrect: { type: Number, default: 0 },
+      unattempted: { type: Number, default: 0 },
+      dropped: { type: Number, default: 0 }
+    },
+    maths: {
+      correct: { type: Number, default: 0 },
+      incorrect: { type: Number, default: 0 },
+      unattempted: { type: Number, default: 0 },
+      dropped: { type: Number, default: 0 }
+    }
   },
-  chatId: Number,
+  chatId: { type: Number, required: true, index: true },
   analysisDate: { type: Date, default: Date.now }
 });
+
 const Response = mongoose.model('Response', responseSchema);
 
-// Initializeapp.get('/admin', basicAuth, async (req, res) => {
+// Initialize Telegram Bot
+const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: false });
+
+// Webhook endpoint
+app.post(`/webhook/${process.env.TELEGRAM_BOT_TOKEN}`, (req, res) => {
+  bot.processUpdate(req.body);
+  res.sendStatus(200);
+});
+
+// Health check endpoint
+app.get('/', (req, res) => res.send('JEE Mains Bot Service is Running'));
+
+// Admin authentication middleware
+const basicAuth = (req, res, next) => {
+  const auth = { login: 'admin', password: process.env.ADMIN_PASSWORD || 'admin123' };
+  const b64auth = (req.headers.authorization || '').split(' ')[1] || '';
+  const [login, password] = Buffer.from(b64auth, 'base64').toString().split(':');
+  
+  if (login === auth.login && password === auth.password) {
+    return next();
+  }
+  res.set('WWW-Authenticate', 'Basic realm="401"');
+  res.status(401).send('Authentication required');
+};
+
+// Admin dashboard route
+app.get('/admin', basicAuth, async (req, res) => {
   try {
     const responses = await Response.find().sort({ analysisDate: -1 }).limit(50);
     
-    let html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
+    let html = `<!DOCTYPE html><html><head>
       <title>JEE Bot Admin</title>
       <style>
         table { width:100%; border-collapse:collapse; margin-top:20px }
@@ -50,139 +97,56 @@ const Response = mongoose.model('Response', responseSchema);
         tr:nth-child(even) { background:#f9f9f9 }
         .progress { background:#e0e0e0; height:20px; border-radius:4px }
         .progress-bar { background:#4CAF50; height:100%; border-radius:4px }
-      </style>
-    </head>
-    <body>
+      </style></head><body>
       <h1>JEE Mains Response Data (Last 50)</h1>
-      <table>
-        <tr>
-          <th>Roll No</th>
-          <th>Name</th>
-          <th>Date</th>
-          <th>Score</th>
-          <th>Physics</th>
-          <th>Chemistry</th>
-          <th>Maths</th>
-          <th>Actions</th>
-        </tr>
-    `;
+      <table><tr>
+        <th>Roll No</th><th>Name</th><th>Date</th>
+        <th>Score</th><th>Physics</th><th>Chemistry</th>
+        <th>Maths</th><th>Actions</th>
+      </tr>`;
 
     responses.forEach(r => {
-      // In your admin dashboard route, update the progress function to:
-const progress = (subject) => {
-  const percentage = Math.round((r.subjectScores[subject].correct / 25) * 100);
-  return `
-  <div class="progress">
-    <div class="progress-bar" style="width:${percentage}%">
-      ${r.subjectScores[subject].correct}
-    </div>
-  </div>
-  `;
-};
+      const progressBar = (correct) => {
+        const percentage = Math.min(Math.round((correct / 25) * 100), 100);
+        return `<div class="progress">
+          <div class="progress-bar" style="width:${percentage}%">${correct}</div>
+        </div>`;
+      };
       
-      html += `
-        <tr>
-          <td>${r.rollNumber}</td>
-          <td>${r.candidateName}</td>
-          <td>${r.testDate} (${r.testTime})</td>
-          <td><b>${r.totalScore}</b>/300</td>
-          <td>${progress('physics')}</td>
-          <td>${progress('chemistry')}</td>
-          <td>${progress('maths')}</td>
-          <td><a href="/admin/response/${r._id}">View</a></td>
-        </tr>
-      `;
+      html += `<tr>
+        <td>${r.rollNumber}</td>
+        <td>${r.candidateName}</td>
+        <td>${r.testDate} (${r.testTime})</td>
+        <td><b>${r.totalScore}</b>/300</td>
+        <td>${progressBar(r.subjectScores.physics.correct)}</td>
+        <td>${progressBar(r.subjectScores.chemistry.correct)}</td>
+        <td>${progressBar(r.subjectScores.maths.correct)}</td>
+        <td><a href="/admin/response/${r._id}">View</a></td>
+      </tr>`;
     });
 
-    html += `
-      </table>
+    html += `</table>
       <p><a href="/admin/export">Export as CSV</a></p>
       <form action="/admin/search" method="get">
         <input type="text" name="query" placeholder="Roll No or Name">
         <button type="submit">Search</button>
-      </form>
-    </body>
-    </html>
-    `;
+      </form></body></html>`;
 
     res.send(html);
   } catch (err) {
-    res.status(500).send(err.message);
-  }
-}); Telegram Bot
-const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: false });
-
-// Webhook Setup
-app.post(`/webhook/${process.env.TELEGRAM_BOT_TOKEN}`, (req, res) => {
-  bot.processUpdate(req.body);
-  res.sendStatus(200);
-});
-
-// Health Check
-app.get('/', (req, res) => res.send('JEE Mains Bot is running!'));
-
-// Admin Dashboard
-
-
-// View Single Response
-app.get('/admin/response/:id', basicAuth, async (req, res) => {
-  try {
-    const response = await Response.findById(req.params.id);
-    if (!response) return res.status(404).send('Not found');
-    
-    res.json(response);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Admin dashboard error:', err);
+    res.status(500).send('Server error');
   }
 });
 
-// Search Responses
-app.get('/admin/search', basicAuth, async (req, res) => {
-  const { query } = req.query;
-  try {
-    const responses = await Response.find({
-      $or: [
-        { rollNumber: new RegExp(query, 'i') },
-        { candidateName: new RegExp(query, 'i') }
-      ]
-    }).limit(50);
-    
-    res.json(responses);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Export Data
-app.get('/admin/export', basicAuth, async (req, res) => {
-  try {
-    const responses = await Response.find().sort({ analysisDate: -1 });
-    
-    let csv = 'Roll No,Name,Date,Time,Score,Physics Correct,Physics Wrong,Chemistry Correct,Chemistry Wrong,Maths Correct,Maths Wrong\n';
-    
-    responses.forEach(r => {
-      csv += `"${r.rollNumber}","${r.candidateName}","${r.testDate}","${r.testTime}",${r.totalScore},` +
-             `${r.subjectScores.physics.correct},${r.subjectScores.physics.incorrect},` +
-             `${r.subjectScores.chemistry.correct},${r.subjectScores.chemistry.incorrect},` +
-             `${r.subjectScores.maths.correct},${r.subjectScores.maths.incorrect}\n`;
-    });
-
-    res.header('Content-Type', 'text/csv');
-    res.attachment('jee-results.csv');
-    res.send(csv);
-  } catch (err) {
-    res.status(500).send(err.message);
-  }
-});
-
-// Start Server
+// Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   bot.setWebHook(`${process.env.WEBHOOK_URL}/webhook/${process.env.TELEGRAM_BOT_TOKEN}`);
 });
 
-// Bot Commands
+// Bot command handlers
 bot.onText(/\/start/, (msg) => {
   bot.sendMessage(msg.chat.id,
     `🔬 <b>JEE Mains Score Calculator</b>\n\n` +
@@ -193,25 +157,38 @@ bot.onText(/\/start/, (msg) => {
   );
 });
 
-// Message Handler
+// Message handler with proper error handling
 bot.on('message', async (msg) => {
   if (!msg.text.startsWith('http')) return;
 
   const chatId = msg.chat.id;
-  const processingMsg = await bot.sendMessage(chatId, '📥 Downloading response sheet...');
+  let processingMsg;
 
   try {
-    const { data: html } = await axios.get(msg.text);
-    const userData = parseAnswerSheetHTML(html);
+    processingMsg = await bot.sendMessage(chatId, '📥 Downloading response sheet...');
     
-    // Determine shift
+    // Fetch response sheet with timeout
+    const { data: html } = await axios.get(msg.text, {
+      timeout: 15000,
+      headers: { 'User-Agent': 'Mozilla/5.0' }
+    });
+
+    if (!html.includes('question-pnl')) {
+      throw new Error('Invalid response sheet format');
+    }
+
+    await bot.editMessageText('🔍 Analyzing your responses...', {
+      chat_id: chatId,
+      message_id: processingMsg.message_id
+    });
+
+    // Parse and evaluate responses
+    const userData = parseAnswerSheetHTML(html);
     const [day, month, year] = userData.general_info.test_date.split('/');
     const shift = userData.general_info.test_time.includes('9:00') ? 'shift-1' : 'shift-2';
     const examKey = `${year}-${month}-${day}-${shift}`;
-    
-    // Calculate score
     const result = evaluateAnswers(userData.questions, answerKeys[examKey] || {});
-    
+
     // Save to database
     await new Response({
       applicationNumber: userData.general_info.application_number,
@@ -231,64 +208,116 @@ bot.on('message', async (msg) => {
     });
 
   } catch (error) {
-    await bot.sendMessage(chatId, `❌ Error: ${error.message}`);
+    console.error('Error processing message:', error);
+    const errorMsg = error.response ? 'Invalid URL or server error' : error.message;
+    await bot.sendMessage(chatId, `❌ Error: ${errorMsg}`);
   } finally {
-    bot.deleteMessage(chatId, processingMsg.message_id);
+    if (processingMsg) {
+      bot.deleteMessage(chatId, processingMsg.message_id).catch(console.error);
+    }
   }
 });
 
-// Accurate JEE Mains Evaluation
-function evaluateAnswers(userAnswers, answerKey) {
-  const results = [];
-  let correctCount = 0, incorrectCount = 0, attemptedCount = 0, droppedCount = 0;
+// Helper functions
+function parseAnswerSheetHTML(html) {
+  const $ = cheerio.load(html);
+  const generalInfo = {};
+  const questions = [];
 
-  const subjectStats = {
-    physics: { attempted: 0, correct: 0, incorrect: 0, dropped: 0 },
-    chemistry: { attempted: 0, correct: 0, incorrect: 0, dropped: 0 },
-    maths: { attempted: 0, correct: 0, incorrect: 0, dropped: 0 }
-  };
-
-  for (const [questionId, correctAnswerId] of Object.entries(answerKey)) {
-    const userAnswerDetails = userAnswers.find(q => q.question_id === questionId);
-    const userAnswerId = userAnswerDetails?.given_answer || "No Answer";
-    const subject = userAnswerDetails?.subject?.toLowerCase() || "unknown";
-
-    if (!subjectStats[subject]) {
-      subjectStats[subject] = { attempted: 0, correct: 0, incorrect: 0, dropped: 0 };
+  // Parse general info
+  $('table[style*="width:500px"] tr').each((i, row) => {
+    const cols = $(row).find('td');
+    if (cols.length >= 2) {
+      const label = $(cols[0]).text().trim().toLowerCase();
+      const value = $(cols[1]).text().trim();
+      if (label.includes('application')) generalInfo.application_number = value;
+      else if (label.includes('name')) generalInfo.candidate_name = value;
+      else if (label.includes('roll')) generalInfo.roll_number = value;
+      else if (label.includes('date')) generalInfo.test_date = value;
+      else if (label.includes('time')) generalInfo.test_time = value;
     }
+  });
 
-    if (correctAnswerId === "Drop") {
-      droppedCount++;
-      subjectStats[subject].dropped++;
-    } else if (userAnswerId !== "No Answer") {
-      attemptedCount++;
-      subjectStats[subject].attempted++;
+  // Parse questions
+  $('.question-pnl').each((i, panel) => {
+    const panel$ = $(panel);
+    const questionId = panel$.find('td:contains("Question ID") + td').text().trim();
+    const questionType = panel$.find('td:contains("Question Type") + td').text().trim();
+    let givenAnswer = "No Answer";
 
-      const correctAnswers = correctAnswerId.includes(",") ? correctAnswerId.split(",") : [correctAnswerId];
-      if (correctAnswers.includes(userAnswerId)) {
-        correctCount++;
-        subjectStats[subject].correct++;
-      } else {
-        incorrectCount++;
-        subjectStats[subject].incorrect++;
+    if (questionType === "MCQ") {
+      const selectedOption = panel$.find('td:contains("Chosen Option") + td').text().trim();
+      if (selectedOption) {
+        givenAnswer = panel$.find(`td:contains("Option ${selectedOption}") + td`).text().trim();
       }
+    } else if (questionType === "SA") {
+      givenAnswer = panel$.find('td.bold[style*="word-break"]').text().trim();
     }
-  }
 
-  const totalScore = (correctCount * 4) - (incorrectCount * 1) + (droppedCount * 4);
+    const section = panel$.closest('.section-cntnr').find('.section-lbl').text();
+    let subject = "unknown";
+    if (section.includes("Physics")) subject = "physics";
+    else if (section.includes("Chemistry")) subject = "chemistry";
+    else if (section.includes("Mathematics")) subject = "maths";
 
-  return {
-    correctCount,
-    incorrectCount,
-    droppedCount,
-    attemptedCount,
-    totalQuestions: Object.keys(answerKey).length,
-    totalScore,
-    subjectStats
-  };
+    if (questionId) {
+      questions.push({
+        question_id: questionId,
+        given_answer: givenAnswer,
+        subject: subject,
+        type: questionType
+      });
+    }
+  });
+
+  return { general_info: generalInfo, questions };
 }
 
-// Format Results with HTML
+function evaluateAnswers(userAnswers, answerKey) {
+  const result = {
+    correctCount: 0,
+    incorrectCount: 0,
+    droppedCount: 0,
+    attemptedCount: 0,
+    subjectStats: {
+      physics: { correct: 0, incorrect: 0, unattempted: 0, dropped: 0 },
+      chemistry: { correct: 0, incorrect: 0, unattempted: 0, dropped: 0 },
+      maths: { correct: 0, incorrect: 0, unattempted: 0, dropped: 0 }
+    }
+  };
+
+  Object.entries(answerKey).forEach(([questionId, correctAnswerId]) => {
+    const userAnswer = userAnswers.find(q => q.question_id === questionId);
+    const subject = userAnswer?.subject || "unknown";
+
+    if (correctAnswerId === "Drop") {
+      result.droppedCount++;
+      result.subjectStats[subject].dropped++;
+    } else if (userAnswer?.given_answer !== "No Answer") {
+      result.attemptedCount++;
+      result.subjectStats[subject].attempted++;
+
+      const isCorrect = correctAnswerId.includes(",") 
+        ? correctAnswerId.split(",").includes(userAnswer.given_answer)
+        : userAnswer.given_answer === correctAnswerId;
+
+      if (isCorrect) {
+        result.correctCount++;
+        result.subjectStats[subject].correct++;
+      } else {
+        result.incorrectCount++;
+        result.subjectStats[subject].incorrect++;
+      }
+    } else {
+      result.subjectStats[subject].unattempted++;
+    }
+  });
+
+  result.totalScore = (result.correctCount * 4) - (result.incorrectCount * 1) + (result.droppedCount * 4);
+  result.totalQuestions = Object.keys(answerKey).length;
+  return result;
+}
+
 function formatResults(info, result) {
   const unattemptedCount = result.totalQuestions - result.attemptedCount - result.droppedCount;
   const totalPerSubject = result.totalQuestions / 3;
@@ -340,4 +369,4 @@ function escapeHtml(text) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
-}
+    }
