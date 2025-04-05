@@ -152,10 +152,10 @@ app.listen(PORT, () => {
 // Bot command handlers
 bot.onText(/\/start/, (msg) => {
   bot.sendMessage(msg.chat.id,
-    `🔬 <b>JEE Mains Score Calculator</b>\n\n` +
+    `🔬 <b>JEE Mains Score Calculator for session 1</b>\n\n` +
     `📤 Send your official response sheet URL from:\n` +
     `https://jeemain.nta.ac.in\n\n` +
-    `Example: https://cdn3.digialm.com/.../DL01108953_2083O24353S1D54672E2.html`,
+    `Example: https://cdn3.digialm.com/...2083O243S1D54692E2.html`,
     { parse_mode: 'HTML' }
   );
 });
@@ -339,7 +339,7 @@ function formatResults(info, result) {
     return `
     <b>${subject.charAt(0).toUpperCase() + subject.slice(1)} (${stats.correct}/${totalPerSubject})</b>
     ${progress} ${percentage}%
-    ✔️ ${stats.correct} | ✖️ ${stats.incorrect} | ➖ ${stats.unattempted} | ✖️ ${stats.dropped}
+    ✅ ${stats.correct} | ❌ ${stats.incorrect} | ➖ ${stats.unattempted} | ✖️ ${stats.dropped}
     `;
   };
 
@@ -359,7 +359,7 @@ function formatResults(info, result) {
 ✖️ <b>Dropped:</b> ${result.droppedCount} (➕${result.droppedCount * 4} marks)
 📝 <b>Attempted:</b> ${result.attemptedCount}/${result.totalQuestions}
 
-🖕 <b>Estimated Score:</b> <code>${result.totalScore}/300</code>
+🎖️ <b>Estimated Score:</b> <code>${result.totalScore}/300</code>
 
 <b>📚 Subject-wise Analysis</b>
 ${subjectStats('physics')}
